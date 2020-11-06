@@ -322,7 +322,7 @@ ELSE()
       OPTION(PA_USE_PULSEAUDIO "Disable support for PulseAudio" OFF)
     ENDIF()
     IF(PA_USE_PULSEAUDIO)
-      SET(PA_PRIVATE_INCLUDE_PATHS ${PA_PRIVATE_INCLUDE_PATHS} ${PULSEAUDIO_INCLUDE_DIRS})
+      SET(PA_PRIVATE_INCLUDE_PATHS ${PA_PRIVATE_INCLUDE_PATHS} ${PulseAudio_INCLUDE_DIRS})
       SET(PA_PULSEAUDIO_SOURCES src/hostapi/pulseaudio/pa_linux_pulseaudio_block.c
                                 src/hostapi/pulseaudio/pa_linux_pulseaudio.c
                                 src/hostapi/pulseaudio/pa_linux_pulseaudio_cb.c)
