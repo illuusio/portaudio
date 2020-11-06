@@ -316,7 +316,7 @@ ELSE()
     ENDIF()
 
     FIND_PACKAGE(PulseAudio)
-    IF(PULSEAUDIO_FOUND)
+    IF(PulseAudio_FOUND)
       OPTION(PA_USE_PULSEAUDIO "Enable support for PulseAudio" ON)
     ELSE()
       OPTION(PA_USE_PULSEAUDIO "Disable support for PulseAudio" OFF)
