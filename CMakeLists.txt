@@ -327,9 +327,9 @@ ELSE()
                                 src/hostapi/pulseaudio/pa_linux_pulseaudio.c
                                 src/hostapi/pulseaudio/pa_linux_pulseaudio_cb.c)
       SOURCE_GROUP("hostapi\\PULSEAUDIO" FILES ${PA_PULSEAUDIO_SOURCES})
-      SET(PA_PUBLIC_INCLUDES ${PA_PUBLIC_INCLUDES} src/hostapi/pulseaudio/pa_linux_pulseaudio_block.h
-                                                   src/hostapi/pulseaudio/pa_linux_pulseaudio.h
-                                                   src/hostapi/pulseaudio/pa_linux_pulseaudio_cb.h)
+      SET(PA_PUBLIC_INCLUDES ${PA_PUBLIC_INCLUDES} src/hostapi/pulseaudio/pa_linux_pulseaudio_block_internal.h
+                                                   src/hostapi/pulseaudio/pa_linux_pulseaudio_internal.h
+                                                   src/hostapi/pulseaudio/pa_linux_pulseaudio_cb_internal.h)
       SET(PA_SOURCES ${PA_SOURCES} ${PA_PULSEAUDIO_SOURCES})
       SET(PA_PRIVATE_COMPILE_DEFINITIONS ${PA_PRIVATE_COMPILE_DEFINITIONS} PA_USE_PULSEAUDIO)
       SET(PA_LIBRARY_DEPENDENCIES ${PA_LIBRARY_DEPENDENCIES} ${PulseAudio_LIBRARIES})
