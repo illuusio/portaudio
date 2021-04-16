@@ -648,6 +648,8 @@ OTHER_OBJS
 LT_AGE
 LT_REVISION
 LT_CURRENT
+PULSE_LIBS
+PULSE_CFLAGS
 JACK_LIBS
 JACK_CFLAGS
 PKG_CONFIG_LIBDIR
@@ -723,7 +725,6 @@ infodir
 docdir
 oldincludedir
 includedir
-runstatedir
 localstatedir
 sharedstatedir
 sysconfdir
@@ -748,6 +749,7 @@ ac_user_opts='
 enable_option_checking
 with_alsa
 with_jack
+with_pulseaudio
 with_oss
 with_asihpi
 with_winapi
@@ -783,7 +785,9 @@ PKG_CONFIG
 PKG_CONFIG_PATH
 PKG_CONFIG_LIBDIR
 JACK_CFLAGS
-JACK_LIBS'
+JACK_LIBS
+PULSE_CFLAGS
+PULSE_LIBS'
 ac_subdirs_all='bindings/cpp'
 
 # Initialize some variables set by options.
@@ -822,7 +826,6 @@ datadir='${datarootdir}'
 sysconfdir='${prefix}/etc'
 sharedstatedir='${prefix}/com'
 localstatedir='${prefix}/var'
-runstatedir='${localstatedir}/run'
 includedir='${prefix}/include'
 oldincludedir='/usr/include'
 docdir='${datarootdir}/doc/${PACKAGE}'
@@ -1075,15 +1078,6 @@ do
   | -silent | --silent | --silen | --sile | --sil)
     silent=yes ;;
 
-  -runstatedir | --runstatedir | --runstatedi | --runstated \
-  | --runstate | --runstat | --runsta | --runst | --runs \
-  | --run | --ru | --r)
-    ac_prev=runstatedir ;;
-  -runstatedir=* | --runstatedir=* | --runstatedi=* | --runstated=* \
-  | --runstate=* | --runstat=* | --runsta=* | --runst=* | --runs=* \
-  | --run=* | --ru=* | --r=*)
-    runstatedir=$ac_optarg ;;
-
   -sbindir | --sbindir | --sbindi | --sbind | --sbin | --sbi | --sb)
     ac_prev=sbindir ;;
   -sbindir=* | --sbindir=* | --sbindi=* | --sbind=* | --sbin=* \
@@ -1221,7 +1215,7 @@ fi
 for ac_var in	exec_prefix prefix bindir sbindir libexecdir datarootdir \
 		datadir sysconfdir sharedstatedir localstatedir includedir \
 		oldincludedir docdir infodir htmldir dvidir pdfdir psdir \
-		libdir localedir mandir runstatedir
+		libdir localedir mandir
 do
   eval ac_val=\$$ac_var
   # Remove trailing slashes.
@@ -1374,7 +1368,6 @@ Fine tuning of the installation directories:
   --sysconfdir=DIR        read-only single-machine data [PREFIX/etc]
   --sharedstatedir=DIR    modifiable architecture-independent data [PREFIX/com]
   --localstatedir=DIR     modifiable single-machine data [PREFIX/var]
-  --runstatedir=DIR       modifiable per-process data [LOCALSTATEDIR/run]
   --libdir=DIR            object code libraries [EPREFIX/lib]
   --includedir=DIR        C header files [PREFIX/include]
   --oldincludedir=DIR     C header files for non-gcc [/usr/include]
@@ -1422,6 +1415,7 @@ Optional Packages:
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
   --with-alsa             Enable support for ALSA [autodetect]
   --with-jack             Enable support for JACK [autodetect]
+  --with-pulseaudio       Enable support for PulseAudio [autodetect]
   --with-oss              Enable support for OSS [autodetect]
   --with-asihpi           Enable support for ASIHPI [autodetect]
   --with-winapi           Select Windows API support
@@ -1454,6 +1448,9 @@ Some influential environment variables:
               path overriding pkg-config's built-in search path
   JACK_CFLAGS C compiler flags for JACK, overriding pkg-config
   JACK_LIBS   linker flags for JACK, overriding pkg-config
+  PULSE_CFLAGS
+              C compiler flags for PULSE, overriding pkg-config
+  PULSE_LIBS  linker flags for PULSE, overriding pkg-config
 
 Use these variables to override the choices made by `configure' or to help
 it to find libraries and programs with nonstandard names/locations.
@@ -2699,6 +2696,13 @@ fi
 # Check whether --with-jack was given.
 if test "${with_jack+set}" = set; then :
   withval=$with_jack; with_jack=$withval
+fi
+
+
+
+# Check whether --with-pulseaudio was given.
+if test "${with_pulseaudio+set}" = set; then :
+  withval=$with_pulseaudio; with_pulseaudio=$withval
 fi
 
 
@@ -15439,8 +15443,7 @@ fi
 
     fi
 fi
-have_jack=no
-if test "x$with_jack" != "xno"; then
+if [ "x$with_jack" != "xno" ] || [ "x$with_pulseaudio" != "xno" ]; then
 
 
 
@@ -15561,6 +15564,9 @@ $as_echo "no" >&6; }
 		PKG_CONFIG=""
 	fi
 fi
+fi
+have_jack=no
+if test "x$with_jack" != "xno"; then
 
 pkg_failed=no
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for JACK" >&5
@@ -15631,6 +15637,80 @@ else
         { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 $as_echo "yes" >&6; }
 	have_jack=yes
+fi
+fi
+have_pulse=no
+if test "x$with_pulseaudio" != "xno"; then
+
+pkg_failed=no
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for PULSE" >&5
+$as_echo_n "checking for PULSE... " >&6; }
+
+if test -n "$PULSE_CFLAGS"; then
+    pkg_cv_PULSE_CFLAGS="$PULSE_CFLAGS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libpulse\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "libpulse") 2>&5
+  ac_status=$?
+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_PULSE_CFLAGS=`$PKG_CONFIG --cflags "libpulse" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+if test -n "$PULSE_LIBS"; then
+    pkg_cv_PULSE_LIBS="$PULSE_LIBS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libpulse\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "libpulse") 2>&5
+  ac_status=$?
+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_PULSE_LIBS=`$PKG_CONFIG --libs "libpulse" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+
+
+
+if test $pkg_failed = yes; then
+   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+
+if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+        _pkg_short_errors_supported=yes
+else
+        _pkg_short_errors_supported=no
+fi
+        if test $_pkg_short_errors_supported = yes; then
+	        PULSE_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "libpulse" 2>&1`
+        else
+	        PULSE_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "libpulse" 2>&1`
+        fi
+	# Put the nasty error message in config.log where it belongs
+	echo "$PULSE_PKG_ERRORS" >&5
+
+	have_pulse=no
+elif test $pkg_failed = untried; then
+     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+	have_pulse=no
+else
+	PULSE_CFLAGS=$pkg_cv_PULSE_CFLAGS
+	PULSE_LIBS=$pkg_cv_PULSE_LIBS
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+	have_pulse=yes
 fi
 fi
 
@@ -16183,12 +16263,27 @@ fi
 
         fi
 
+        if [ "$have_pulse" = "yes" ] || [ "$have_jack" = "yes" ] ; then
+           OTHER_OBJS="$OTHER_OBJS src/common/pa_ringbuffer.o"
+           INCLUDES="$INCLUDES pa_linux_pulseaudio.h"
+        fi
+
         if [ "$have_jack" = "yes" ] && [ "$with_jack" != "no" ] ; then
            DLL_LIBS="$DLL_LIBS $JACK_LIBS"
            CFLAGS="$CFLAGS $JACK_CFLAGS"
-           OTHER_OBJS="$OTHER_OBJS src/hostapi/jack/pa_jack.o src/common/pa_ringbuffer.o"
+           OTHER_OBJS="$OTHER_OBJS src/hostapi/jack/pa_jack.o"
            INCLUDES="$INCLUDES pa_jack.h"
            $as_echo "#define PA_USE_JACK 1" >>confdefs.h
+
+        fi
+
+        if [ "$have_pulse" = "yes" ] && [ "$with_pulse" != "no" ] ; then
+           DLL_LIBS="$DLL_LIBS $PULSE_LIBS"
+           CFLAGS="$CFLAGS $PULSE_CFLAGS"
+           OTHER_OBJS="$OTHER_OBJS src/hostapi/pulseaudio/pa_linux_pulseaudio_cb.o"
+           OTHER_OBJS="$OTHER_OBJS src/hostapi/pulseaudio/pa_linux_pulseaudio_block.o"
+           OTHER_OBJS="$OTHER_OBJS src/hostapi/pulseaudio/pa_linux_pulseaudio.o"
+                      $as_echo "#define PA_USE_PULSEAUDIO 1" >>confdefs.h
 
         fi
 
@@ -18816,10 +18911,12 @@ $as_echo "
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: result:
   OSS ......................... $have_oss
   JACK ........................ $have_jack
+  PulseAudio .................. $have_pulse
 " >&5
 $as_echo "
   OSS ......................... $have_oss
   JACK ........................ $have_jack
+  PulseAudio .................. $have_pulse
 " >&6; }
         ;;
 esac
