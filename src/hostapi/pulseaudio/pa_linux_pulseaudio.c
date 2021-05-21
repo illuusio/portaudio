@@ -954,6 +954,22 @@ PaError OpenStream( struct PaUtilHostApiRepresentation *hostApi,
         goto error;
     }
 
+    /* Allocate memory for source and sink names. */
+    const char defaultSourceStreamName[] = "Portaudio source";
+    const char defaultSinkStreamName[] = "Portaudio sink";
+
+    stream->sourceStreamName = (char*)PaUtil_AllocateMemory(sizeof(defaultSourceStreamName));
+    stream->sinkStreamName = (char*)PaUtil_AllocateMemory(sizeof(defaultSinkStreamName));
+    if ( !stream->sourceStreamName || !stream->sinkStreamName )
+    {
+        result = paInsufficientMemory;
+        goto error;
+    }
+
+    /* Copy initial stream names to memory. */
+    memcpy( stream->sourceStreamName, defaultSourceStreamName, sizeof(defaultSourceStreamName) );
+    memcpy( stream->sinkStreamName, defaultSinkStreamName, sizeof(defaultSinkStreamName) );
+ 
     stream->isActive = 0;
     stream->isStopped = 1;
 
@@ -1028,7 +1044,7 @@ PaError OpenStream( struct PaUtilHostApiRepresentation *hostApi,
 
         stream->inStream =
             pa_stream_new( l_ptrPulseAudioHostApi->context,
-                           "Portaudio source",
+                           stream->sourceStreamName,
                            &stream->inSampleSpec,
                            NULL );
 
@@ -1141,7 +1157,7 @@ PaError OpenStream( struct PaUtilHostApiRepresentation *hostApi,
 
         stream->outStream =
             pa_stream_new( l_ptrPulseAudioHostApi->context,
-                           "Portaudio sink",
+                           stream->sinkStreamName,
                            &stream->outSampleSpec,
                            NULL );
 
@@ -1264,6 +1280,8 @@ PaError OpenStream( struct PaUtilHostApiRepresentation *hostApi,
 
     if( stream )
     {
+        PaUtil_FreeMemory( stream->sourceStreamName );
+        PaUtil_FreeMemory( stream->sinkStreamName );
         PaUtil_FreeMemory(stream);
     }
 
@@ -1312,4 +1330,85 @@ double GetStreamCpuLoad( PaStream * s )
     PaPulseAudio_Stream *stream = (PaPulseAudio_Stream *) s;
 
     return PaUtil_GetCpuLoad( &stream->cpuLoadMeasurer );
+}
+
+/** Extensions */
+static void RenameStreamCb(pa_stream *s, int success, void *userdata)
+{
+    /* Currently does nothing but signal the caller. */
+    PaPulseAudio_Stream *l_ptrStream = (PaPulseAudio_Stream *) userdata;
+    pa_threaded_mainloop_signal( l_ptrStream->mainloop,
+                                 0 );
+}
+
+PaError PaPulseAudio_RenameSource( PaStream *s, const char *streamName )
+{
+    PaPulseAudio_Stream *stream = (PaPulseAudio_Stream *) s;
+    PaError result = paNoError;
+    pa_operation *op = NULL;
+
+    if ( stream->inStream == NULL )
+    {
+        return paInvalidDevice;
+    }
+
+    /* Reallocate stream name in memory. */
+    pa_threaded_mainloop_lock( stream->mainloop );
+    char *newStreamName = (char*)PaUtil_AllocateMemory(strnlen(streamName, PAPULSEAUDIO_MAX_DEVICENAME) + 1);
+    if ( !newStreamName )
+    {
+        pa_threaded_mainloop_unlock( stream->mainloop );
+        return paInsufficientMemory;
+    }
+    snprintf(newStreamName, strnlen(streamName, PAPULSEAUDIO_MAX_DEVICENAME) + 1, "%s", streamName);
+
+    PaUtil_FreeMemory( stream->sourceStreamName );
+    stream->sourceStreamName = newStreamName;
+
+    op = pa_stream_set_name( stream->inStream, streamName, RenameStreamCb, stream );
+    pa_threaded_mainloop_unlock( stream->mainloop );
+
+    /* Wait for completion. */
+    while (pa_operation_get_state( op ) == PA_OPERATION_RUNNING)
+    {
+        pa_threaded_mainloop_wait( stream->mainloop );
+    }
+
+    return result;
+}
+
+PaError PaPulseAudio_RenameSink( PaStream *s, const char *streamName )
+{
+    PaPulseAudio_Stream *stream = (PaPulseAudio_Stream *) s;
+    PaError result = paNoError;
+    pa_operation *op = NULL;
+    
+    if ( stream->outStream == NULL )
+    {
+        return paInvalidDevice;
+    }
+
+    /* Reallocate stream name in memory. */
+    pa_threaded_mainloop_lock( stream->mainloop );
+    char *newStreamName = (char*)PaUtil_AllocateMemory(strnlen(streamName, PAPULSEAUDIO_MAX_DEVICENAME) + 1);
+    if ( !newStreamName )
+    {
+        pa_threaded_mainloop_unlock( stream->mainloop );
+        return paInsufficientMemory;
+    }
+    snprintf(newStreamName, strnlen(streamName, PAPULSEAUDIO_MAX_DEVICENAME) + 1, "%s", streamName);
+
+    PaUtil_FreeMemory( stream->sinkStreamName );
+    stream->sinkStreamName = newStreamName;
+    
+    op = pa_stream_set_name( stream->outStream, streamName, RenameStreamCb, stream );
+    pa_threaded_mainloop_unlock( stream->mainloop );
+
+    /* Wait for completion. */
+    while (pa_operation_get_state( op ) == PA_OPERATION_RUNNING)
+    {
+        pa_threaded_mainloop_wait( stream->mainloop );
+    }
+
+    return result;
 }
