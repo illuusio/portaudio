@@ -58,6 +58,26 @@
     for blocking streams.
 */
 
+/* locks the Pulse Main loop when not called from it */
+static void lock( pa_threaded_mainloop *m ) {
+    if (!pa_threaded_mainloop_in_thread( m )) {
+        pa_threaded_mainloop_lock( m );
+    }
+}
+
+/* unlocks the Pulse Main loop when not called from it */
+static void unlock( pa_threaded_mainloop *m ) {
+    if (!pa_threaded_mainloop_in_thread( m )) {
+        pa_threaded_mainloop_unlock( m );
+    }
+}
+
+static void success_cb(pa_stream *s, int success, void *userdata)
+{
+    PaPulseAudio_Stream *l_ptrStream = (PaPulseAudio_Stream *) userdata;
+    pa_threaded_mainloop_signal( l_ptrStream->mainloop, 0 );
+}
+
 PaError PaPulseAudio_ReadStreamBlock( PaStream * s,
                                       void *buffer,
                                       unsigned long frames )
@@ -70,7 +90,8 @@ PaError PaPulseAudio_ReadStreamBlock( PaStream * s,
     uint8_t *l_ptrData = (uint8_t *) buffer;
     long l_lLength = (frames * l_ptrStream->inputFrameSize);
 
-    while( l_lLength > 0 )
+    lock( l_ptrStream->mainloop );
+    while( l_lLength > 0)
     {
         PA_PULSEAUDIO_IS_ERROR(l_ptrStream, paStreamIsStopped)
 
@@ -92,6 +113,7 @@ PaError PaPulseAudio_ReadStreamBlock( PaStream * s,
             usleep(100);
         }
     }
+    unlock( l_ptrStream->mainloop );
     return paNoError;
 }
 
@@ -115,9 +137,9 @@ PaError PaPulseAudio_WriteStreamBlock( PaStream * s,
     {
         PA_PULSEAUDIO_IS_ERROR(l_ptrStream, paStreamIsStopped)
 
-        pa_threaded_mainloop_lock( l_ptrStream->mainloop );
+        lock( l_ptrStream->mainloop );
         l_lWritable = pa_stream_writable_size( l_ptrStream->outStream );
-        pa_threaded_mainloop_unlock( l_ptrStream->mainloop );
+        unlock( l_ptrStream->mainloop );
 
         if( l_lWritable > 0 )
         {
@@ -125,7 +147,7 @@ PaError PaPulseAudio_WriteStreamBlock( PaStream * s,
            {
                 l_lWritable = l_lLength;
            }
-           pa_threaded_mainloop_lock( l_ptrStream->mainloop );
+           lock( l_ptrStream->mainloop );
            l_iRet = pa_stream_write( l_ptrStream->outStream,
                                      l_ptrData,
                                      l_lWritable,
@@ -134,37 +156,20 @@ PaError PaPulseAudio_WriteStreamBlock( PaStream * s,
                                      PA_SEEK_RELATIVE );
 
             l_ptrOperation = pa_stream_update_timing_info( l_ptrStream->outStream,
-                                                           NULL,
-                                                           NULL );
-            pa_threaded_mainloop_unlock( l_ptrStream->mainloop );
-
-            l_iRet = 0;
-
-            if( l_ptrOperation == NULL )
-            {
-                return paInsufficientMemory;
-            }
-
-            while( pa_operation_get_state( l_ptrOperation ) == PA_OPERATION_RUNNING )
-            {
-                l_iRet ++;
-                PA_PULSEAUDIO_IS_ERROR(l_ptrStream, paStreamIsStopped)
-
-                /* As this shouldn never happen it's error if it does */
-                if( l_iRet >= 10000 )
-                {
-                    return paStreamIsStopped;
+                                                           &success_cb,
+                                                           l_ptrStream );
+            
+            if (l_ptrOperation) {
+                if (!pa_threaded_mainloop_in_thread( l_ptrStream->mainloop )) {
+                    while( pa_operation_get_state( l_ptrOperation ) == PA_OPERATION_RUNNING)
+                    {
+                        pa_threaded_mainloop_wait( l_ptrStream->mainloop );
+                    }
                 }
-
-                usleep(100);
+                pa_operation_unref( l_ptrOperation );
+                l_ptrOperation = NULL;
             }
-
-            pa_threaded_mainloop_lock( l_ptrStream->mainloop );
-
-            pa_operation_unref( l_ptrOperation );
-            l_ptrOperation = NULL;
-
-            pa_threaded_mainloop_unlock( l_ptrStream->mainloop );
+            unlock( l_ptrStream->mainloop );
 
             l_ptrData += l_lWritable;
             l_lLength -= l_lWritable;
@@ -181,7 +186,6 @@ PaError PaPulseAudio_WriteStreamBlock( PaStream * s,
     }
     PaUtil_EndCpuLoadMeasurement( &l_ptrStream->cpuLoadMeasurer,
                                   frames );
-
     return paNoError;
 }
 
@@ -192,8 +196,7 @@ signed long PaPulseAudio_GetStreamReadAvailableBlock( PaStream * s )
 
     if( l_ptrStream->inStream == NULL )
     {
-        return 0;
-    }
+        return 0;    }
 
     return (PaUtil_GetRingBufferReadAvailable(&l_ptrStream->inputRing) /
             l_ptrStream->inputFrameSize);
@@ -211,6 +214,10 @@ signed long PaPulseAudio_GetStreamWriteAvailableBlock( PaStream * s )
         return 0;
     }
 
-    return (PaUtil_GetRingBufferWriteAvailable(&l_ptrStream->outputRing) /
-            l_ptrStream->outputFrameSize);
+    lock( l_ptrStream->mainloop );
+    long l_lWritable = pa_stream_writable_size( l_ptrStream->outStream )  /
+            l_ptrStream->outputFrameSize;
+    unlock( l_ptrStream->mainloop );
+
+    return l_lWritable;
 }

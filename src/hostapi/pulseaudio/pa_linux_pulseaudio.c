@@ -416,6 +416,7 @@ void PaPulseAudio_SourceListCb( pa_context * c,
 void PaPulseAudio_StreamStateCb( pa_stream * s,
                                  void *userdata )
 {
+    PaPulseAudio_Stream *l_ptrStream = (PaPulseAudio_Stream *) userdata;
     const pa_buffer_attr *l_SBufferAttr = NULL;
     /* If you need debug pring enable these
      * char cmt[PA_CHANNEL_MAP_SNPRINT_MAX], sst[PA_SAMPLE_SPEC_SNPRINT_MAX];
@@ -463,6 +464,11 @@ void PaPulseAudio_StreamStateCb( pa_stream * s,
                       pa_strerror( pa_context_errno( pa_stream_get_context( s ) ) ) ) );
 
             break;
+    }
+
+    if (l_ptrStream->mainloop) {
+        pa_threaded_mainloop_signal( l_ptrStream->mainloop,
+                                     0 );
     }
 }
 
@@ -700,10 +706,10 @@ PaError PaPulseAudio_Initialize( PaUtilHostApiRepresentation ** hostApi,
                                       PaUtil_DummyGetWriteAvailable );
 
     PaUtil_InitializeStreamInterface( &l_ptrPulseAudioHostApi->blockingStreamInterface,
-                                      PaPulseAudio_CloseStreamCb,
-                                      PaPulseAudio_StartStreamCb,
-                                      PaPulseAudio_StopStreamCb,
-                                      PaPulseAudio_AbortStreamCb,
+                                      PaPulseAudio_CloseStreamBlock,
+                                      PaPulseAudio_StartStreamBlock,
+                                      PaPulseAudio_StopStreamBlock,
+                                      PaPulseAudio_AbortStreamBlock,
                                       IsStreamStopped,
                                       IsStreamActive,
                                       GetStreamTime,
@@ -895,7 +901,7 @@ PaError PaPulseAudio_BlockingInitRingBuffer( PaPulseAudio_Stream * stream,
                                              PaUtilRingBuffer * rbuf,
                                              int size )
 {
-    long l_lNumBytes = 4096 * size;
+    long l_lNumBytes = size;
     char *l_ptrBuffer = (char *) malloc(l_lNumBytes);
 
     if( l_ptrBuffer == NULL )
@@ -977,9 +983,6 @@ PaError OpenStream( struct PaUtilHostApiRepresentation *hostApi,
     stream->outStream = NULL;
     stream->outBuffer = NULL;
     stream->inBuffer = NULL;
-    memset( &stream->outputRing,
-            0x00,
-            sizeof(PaUtilRingBuffer) );
     memset( &stream->inputRing,
             0x00,
             sizeof(PaUtilRingBuffer) );
@@ -1052,13 +1055,16 @@ PaError OpenStream( struct PaUtilHostApiRepresentation *hostApi,
         {
             pa_stream_set_state_callback( stream->inStream,
                                           PaPulseAudio_StreamStateCb,
-                                          NULL);
+                                          stream);
             pa_stream_set_started_callback( stream->inStream,
                                             PaPulseAudio_StreamStartedCb,
-                                            NULL );
+                                            stream );
             pa_stream_set_read_callback( stream->inStream,
                                          PaPulseAudio_StreamRecordCb,
                                          stream);
+
+
+ // ############
 
         }
 
@@ -1074,7 +1080,7 @@ PaError OpenStream( struct PaUtilHostApiRepresentation *hostApi,
         {
             result = PaPulseAudio_BlockingInitRingBuffer( stream,
                                                           &stream->inputRing,
-                                                          stream->inputFrameSize );
+                                                          stream->inputFrameSize * framesPerBuffer * 2 );
             if( result != paNoError )
             {
                 goto error;
@@ -1165,10 +1171,10 @@ PaError OpenStream( struct PaUtilHostApiRepresentation *hostApi,
         {
             pa_stream_set_state_callback( stream->outStream,
                                           PaPulseAudio_StreamStateCb,
-                                          NULL );
+                                          stream );
             pa_stream_set_started_callback( stream->outStream,
                                             PaPulseAudio_StreamStartedCb,
-                                            NULL );
+                                            stream );
 
             /* If we use callback then use callback in PaPulseAudio_ */
             if( streamCallback )
@@ -1176,24 +1182,25 @@ PaError OpenStream( struct PaUtilHostApiRepresentation *hostApi,
                 pa_stream_set_write_callback( stream->outStream,
                                               PaPulseAudio_StreamPlaybackCb,
                                               stream );
+            } 
+            else 
+            {
+                stream->bufferAttr.fragsize = (uint32_t)-1;
+                stream->bufferAttr.maxlength = (uint32_t)-1;
+                stream->bufferAttr.minreq = (uint32_t)-1;
+                stream->bufferAttr.prebuf = (uint32_t)-1;
+                stream->bufferAttr.tlength = pa_usec_to_bytes( (pa_usec_t)(stream->latency * PA_USEC_PER_SEC), &stream->outSampleSpec );
+                if (pa_stream_connect_playback(stream->outStream, NULL, &stream->bufferAttr, PA_STREAM_ADJUST_LATENCY, NULL, NULL))
+                {
+                    PA_DEBUG( ("Portaudio %s: Can't connect playback!\n",
+                      __FUNCTION__) );
+                }
             }
         }
-
         else
         {
             PA_DEBUG( ("Portaudio %s: Can't alloc output stream!\n",
                       __FUNCTION__) );
-        }
-
-        if( !streamCallback )
-        {
-            result = PaPulseAudio_BlockingInitRingBuffer( stream,
-                                                          &stream->outputRing,
-                                                          stream->outputFrameSize );
-            if( result != paNoError )
-            {
-                goto error;
-            }
         }
 
         stream->outDevice = outputParameters->device;

@@ -147,7 +147,6 @@ typedef struct PaPulseAudio_Stream
     void *inBuffer;
 
     PaUtilRingBuffer inputRing;
-    PaUtilRingBuffer outputRing;
 
     /* Used in communication between threads */
     volatile sig_atomic_t callback_finished;        /* bool: are we in the "callback finished" state? */
