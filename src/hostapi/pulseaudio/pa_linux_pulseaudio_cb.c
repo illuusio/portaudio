@@ -428,6 +428,17 @@ static int _PaPulseAudio_ProcessAudio(PaPulseAudio_Stream *stream,
             PaUtil_SetOutputFrameCount( &stream->bufferProcessor,
                                         hostFramesPerBuffer );
 
+        }
+
+        hostFrameCount =
+            PaUtil_EndBufferProcessing( &stream->bufferProcessor,
+                                        &ret );
+
+        PaUtil_EndCpuLoadMeasurement( &stream->cpuLoadMeasurer,
+                                      hostFrameCount );
+
+        if( isOutputCb && bufferData && ret == paContinue)
+        {
             if( pa_stream_write( stream->outputStream,
                                  bufferData,
                                  pulseaudioOutputBytes,
@@ -440,17 +451,16 @@ static int _PaPulseAudio_ProcessAudio(PaPulseAudio_Stream *stream,
             }
 
             pulseaudioOutputWritten += pulseaudioOutputBytes;
+            bufferData = NULL;
         }
 
-        hostFrameCount =
-            PaUtil_EndBufferProcessing( &stream->bufferProcessor,
-                                        &ret );
-
-        PaUtil_EndCpuLoadMeasurement( &stream->cpuLoadMeasurer,
-                                      hostFrameCount );
-
-        if( ret )
+        if( ret != paContinue )
         {
+            if( bufferData )
+            {
+                pa_stream_cancel_write( stream->inputStream );
+                bufferData = NULL;
+            }
             stream->isActive = 0;
             pulseaudioLength = length - pulseaudioOutputWritten;
             goto outputzero;
