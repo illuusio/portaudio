@@ -304,7 +304,9 @@ int _PaPulseAudio_AddAudioDevice( PaPulseAudio_HostApiRepresentation *hostapi,
                                   double defaultHighInputLatency,
                                   double defaultLowOutputLatency,
                                   double defaultHighOutputLatency,
-                                  const long defaultSampleRate )
+                                  const long defaultSampleRate,
+                                  const pa_source_info *sourceInfo,
+                                  const pa_sink_info *sinkInfo )
 {
     /* These should be at least 1
      *
@@ -315,6 +317,19 @@ int _PaPulseAudio_AddAudioDevice( PaPulseAudio_HostApiRepresentation *hostapi,
     int pulseaudioRealNameSize = strnlen( PaPulseAudio_SinkSourceNameDesc, (PAPULSEAUDIO_MAX_DEVICENAME - 1) ) + 1;
     int pulseaudioDeviceNameSize = strnlen( PaPulseAudio_SinkSourceName, (PAPULSEAUDIO_MAX_DEVICENAME - 1) ) + 1;
     char *pulseaudioLocalDeviceName = NULL;
+
+    memset(&hostapi->deviceInfoArray[hostapi->deviceCount].channelMap, 0x00, sizeof(pa_channel_map));
+    memset(&hostapi->deviceInfoArray[hostapi->deviceCount].channelMap, 0x00, sizeof(pa_channel_map));
+
+    if( sourceInfo != NULL )
+    {
+        memcpy(&hostapi->deviceInfoArray[hostapi->deviceCount].channelMap, &sourceInfo->channel_map, sizeof(pa_channel_map));
+    }
+
+    if( sinkInfo != NULL )
+    {
+        memcpy(&hostapi->deviceInfoArray[hostapi->deviceCount].channelMap, &sinkInfo->channel_map, sizeof(pa_channel_map));
+    }
 
     hostapi->deviceInfoArray[hostapi->deviceCount].inheritedDeviceInfo.structVersion = 2;
     hostapi->deviceInfoArray[hostapi->deviceCount].inheritedDeviceInfo.hostApi = hostapi->hostApiIndex;
@@ -330,6 +345,8 @@ int _PaPulseAudio_AddAudioDevice( PaPulseAudio_HostApiRepresentation *hostapi,
                                           "_PaPulseAudio_AddAudioDevice: Can't alloc memory" );
         return paInsufficientMemory;
     }
+
+
 
     /* We can maximum have 1024 (PAPULSEAUDIO_MAX_DEVICECOUNT)
      * devices where to choose which should be mostly enough
@@ -404,7 +421,9 @@ void PaPulseAudio_SinkListCb( pa_context * c,
                                       0,
                                       PA_PULSEAUDIO_DEFAULT_MIN_LATENCY,
                                       PA_PULSEAUDIO_DEFAULT_MAX_LATENCY,
-                                      l->sample_spec.rate ) != paNoError )
+                                      l->sample_spec.rate,
+                                      NULL,
+                                      l ) != paNoError )
     {
         PA_PULSEAUDIO_SET_LAST_HOST_ERROR( 0,
                                            "PaPulseAudio_SinkListCb: Can't add device. Maximum amount reached!" );
@@ -456,7 +475,9 @@ void PaPulseAudio_SourceListCb( pa_context * c,
                                       PA_PULSEAUDIO_DEFAULT_MAX_LATENCY,
                                       0,
                                       0,
-                                      l->sample_spec.rate ) != paNoError )
+                                      l->sample_spec.rate,
+                                      l,
+                                      NULL ) != paNoError )
     {
         PA_PULSEAUDIO_SET_LAST_HOST_ERROR( 0,
                                            "PaPulseAudio_SourceListCb: Can't add device. Maximum amount reached!" );
@@ -667,7 +688,9 @@ PaError PaPulseAudio_Initialize( PaUtilHostApiRepresentation ** hostApi,
                                       0,
                                       PA_PULSEAUDIO_DEFAULT_MIN_LATENCY,
                                       PA_PULSEAUDIO_DEFAULT_MAX_LATENCY,
-                                      pulseaudioHostApi->pulseaudioDefaultSampleSpec.rate ) != paNoError )
+                                      pulseaudioHostApi->pulseaudioDefaultSampleSpec.rate,
+                                      NULL,
+                                      NULL ) != paNoError )
     {
         PA_PULSEAUDIO_SET_LAST_HOST_ERROR( 0,
                                            "PaPulseAudio_SinkListCb: Can't add device. Maximum amount reached!" );
@@ -686,7 +709,9 @@ PaError PaPulseAudio_Initialize( PaUtilHostApiRepresentation ** hostApi,
                                       PA_PULSEAUDIO_DEFAULT_MAX_LATENCY,
                                       0,
                                       0,
-                                      pulseaudioHostApi->pulseaudioDefaultSampleSpec.rate ) != paNoError )
+                                      pulseaudioHostApi->pulseaudioDefaultSampleSpec.rate,
+                                      NULL,
+                                      NULL ) != paNoError )
     {
         PA_PULSEAUDIO_SET_LAST_HOST_ERROR( 0,
                                            "PaPulseAudio_SinkListCb: Can't add device. Maximum amount reached!" );
@@ -1018,6 +1043,8 @@ PaError OpenStream( struct PaUtilHostApiRepresentation *hostApi,
     PaSampleFormat hostInputSampleFormat,
      hostOutputSampleFormat;
 
+    int i = 0;
+
     /* validate platform specific flags */
     if( (streamFlags & paPlatformSpecificFlags) != 0 )
     {
@@ -1066,6 +1093,7 @@ PaError OpenStream( struct PaUtilHostApiRepresentation *hostApi,
 
     stream->inputStream = NULL;
     stream->outputStream = NULL;
+
     memset( &stream->inputRing,
             0x00,
             sizeof( PaUtilRingBuffer ) );
@@ -1130,6 +1158,14 @@ PaError OpenStream( struct PaUtilHostApiRepresentation *hostApi,
         pa_channel_map_init_auto( &stream->inputChannelMap,
                                   inputChannelCount,
                                   PA_CHANNEL_MAP_DEFAULT );
+
+        if( pulseaudioHostApi->deviceInfoArray[inputParameters->device].channelMap.channels > 0 )
+        {
+           for( i = 0; i < inputChannelCount; i ++ )
+           {
+               stream->inputChannelMap.map[i] = pulseaudioHostApi->deviceInfoArray[inputParameters->device].channelMap.map[i];
+           }
+        }
 
         if( !pa_channel_map_valid( &stream->inputChannelMap ) )
         {
@@ -1254,6 +1290,14 @@ PaError OpenStream( struct PaUtilHostApiRepresentation *hostApi,
         pa_channel_map_init_auto( &stream->outputChannelMap,
                                   outputChannelCount,
                                   PA_CHANNEL_MAP_DEFAULT );
+
+        if( pulseaudioHostApi->deviceInfoArray[outputParameters->device].channelMap.channels > 0 )
+        {
+           for( i = 0; i < outputChannelCount; i ++ )
+           {
+                stream->outputChannelMap.map[i] = pulseaudioHostApi->deviceInfoArray[outputParameters->device].channelMap.map[i];
+           }
+        }
 
         if( !pa_channel_map_valid( &stream->outputChannelMap ) )
         {
