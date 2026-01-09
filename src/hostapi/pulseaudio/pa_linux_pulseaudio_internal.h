@@ -87,6 +87,14 @@ extern "C"
 
 typedef struct
 {
+    PaDeviceInfo inheritedDeviceInfo;
+    pa_channel_map channelMap;
+    char *pulseaudioDeviceName;
+}
+PaPulseaudio_PaDeviceInfo;
+
+typedef struct
+{
     PaUtilHostApiRepresentation inheritedHostApiRep;
     PaUtilStreamInterface callbackStreamInterface;
     PaUtilStreamInterface blockingStreamInterface;
@@ -94,8 +102,7 @@ typedef struct
     PaUtilAllocationGroup *allocations;
 
     PaHostApiIndex hostApiIndex;
-    PaDeviceInfo deviceInfoArray[PAPULSEAUDIO_MAX_DEVICECOUNT];
-    char *pulseaudioDeviceNames[PAPULSEAUDIO_MAX_DEVICECOUNT];
+    PaPulseaudio_PaDeviceInfo deviceInfoArray[PAPULSEAUDIO_MAX_DEVICECOUNT];
     pa_sample_spec pulseaudioDefaultSampleSpec;
 
     /* PulseAudio stuff goes here */
@@ -121,6 +128,8 @@ typedef struct PaPulseAudio_Stream
     pa_context *context;
     pa_sample_spec outputSampleSpec;
     pa_sample_spec inputSampleSpec;
+    pa_channel_map outputChannelMap;
+    pa_channel_map inputChannelMap;
     pa_stream *outputStream;
     pa_stream *inputStream;
     pa_buffer_attr outputBufferAttr;

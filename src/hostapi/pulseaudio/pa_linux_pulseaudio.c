@@ -316,14 +316,14 @@ int _PaPulseAudio_AddAudioDevice( PaPulseAudio_HostApiRepresentation *hostapi,
     int pulseaudioDeviceNameSize = strnlen( PaPulseAudio_SinkSourceName, (PAPULSEAUDIO_MAX_DEVICENAME - 1) ) + 1;
     char *pulseaudioLocalDeviceName = NULL;
 
-    hostapi->deviceInfoArray[hostapi->deviceCount].structVersion = 2;
-    hostapi->deviceInfoArray[hostapi->deviceCount].hostApi = hostapi->hostApiIndex;
-    hostapi->pulseaudioDeviceNames[hostapi->deviceCount] =
+    hostapi->deviceInfoArray[hostapi->deviceCount].inheritedDeviceInfo.structVersion = 2;
+    hostapi->deviceInfoArray[hostapi->deviceCount].inheritedDeviceInfo.hostApi = hostapi->hostApiIndex;
+    hostapi->deviceInfoArray[hostapi->deviceCount].pulseaudioDeviceName =
         PaUtil_GroupAllocateZeroInitializedMemory( hostapi->allocations,
                                                    pulseaudioRealNameSize );
     pulseaudioLocalDeviceName = PaUtil_GroupAllocateZeroInitializedMemory( hostapi->allocations,
                                                                 pulseaudioDeviceNameSize );
-    if( !hostapi->pulseaudioDeviceNames[hostapi->deviceCount] &&
+    if( !hostapi->deviceInfoArray[hostapi->deviceCount].pulseaudioDeviceName &&
         !pulseaudioLocalDeviceName )
     {
         PA_PULSEAUDIO_SET_LAST_HOST_ERROR( 0,
@@ -339,7 +339,7 @@ int _PaPulseAudio_AddAudioDevice( PaPulseAudio_HostApiRepresentation *hostapi,
         return paDeviceUnavailable;
     }
 
-    snprintf( hostapi->pulseaudioDeviceNames[hostapi->deviceCount],
+    snprintf( hostapi->deviceInfoArray[hostapi->deviceCount].pulseaudioDeviceName,
               pulseaudioRealNameSize,
               "%s",
               PaPulseAudio_SinkSourceNameDesc );
@@ -349,15 +349,15 @@ int _PaPulseAudio_AddAudioDevice( PaPulseAudio_HostApiRepresentation *hostapi,
               PaPulseAudio_SinkSourceName );
 
 
-    hostapi->deviceInfoArray[hostapi->deviceCount].name = pulseaudioLocalDeviceName;
+    hostapi->deviceInfoArray[hostapi->deviceCount].inheritedDeviceInfo.name = pulseaudioLocalDeviceName;
 
-    hostapi->deviceInfoArray[hostapi->deviceCount].maxInputChannels = inputChannels;
-    hostapi->deviceInfoArray[hostapi->deviceCount].maxOutputChannels = outputChannels;
-    hostapi->deviceInfoArray[hostapi->deviceCount].defaultLowInputLatency = defaultLowInputLatency;
-    hostapi->deviceInfoArray[hostapi->deviceCount].defaultLowOutputLatency = defaultLowOutputLatency;
-    hostapi->deviceInfoArray[hostapi->deviceCount].defaultHighInputLatency = defaultHighInputLatency;
-    hostapi->deviceInfoArray[hostapi->deviceCount].defaultHighOutputLatency = defaultHighOutputLatency;
-    hostapi->deviceInfoArray[hostapi->deviceCount].defaultSampleRate = defaultSampleRate;
+    hostapi->deviceInfoArray[hostapi->deviceCount].inheritedDeviceInfo.maxInputChannels = inputChannels;
+    hostapi->deviceInfoArray[hostapi->deviceCount].inheritedDeviceInfo.maxOutputChannels = outputChannels;
+    hostapi->deviceInfoArray[hostapi->deviceCount].inheritedDeviceInfo.defaultLowInputLatency = defaultLowInputLatency;
+    hostapi->deviceInfoArray[hostapi->deviceCount].inheritedDeviceInfo.defaultLowOutputLatency = defaultLowOutputLatency;
+    hostapi->deviceInfoArray[hostapi->deviceCount].inheritedDeviceInfo.defaultHighInputLatency = defaultHighInputLatency;
+    hostapi->deviceInfoArray[hostapi->deviceCount].inheritedDeviceInfo.defaultHighOutputLatency = defaultHighOutputLatency;
+    hostapi->deviceInfoArray[hostapi->deviceCount].inheritedDeviceInfo.defaultSampleRate = defaultSampleRate;
     hostapi->deviceCount++;
 
     return paNoError;
@@ -639,7 +639,7 @@ PaError PaPulseAudio_Initialize( PaUtilHostApiRepresentation ** hostApi,
             sizeof(PaDeviceInfo) * PAPULSEAUDIO_MAX_DEVICECOUNT );
     for (i = 0; i < PAPULSEAUDIO_MAX_DEVICECOUNT; i++)
     {
-        pulseaudioHostApi->pulseaudioDeviceNames[i] = NULL;
+        pulseaudioHostApi->deviceInfoArray[i].pulseaudioDeviceName = NULL;
     }
 
     /* Get info about server. This returns Default sink and soure name. */
@@ -746,7 +746,7 @@ PaError PaPulseAudio_Initialize( PaUtilHostApiRepresentation ** hostApi,
         for ( i = 0; i < pulseaudioHostApi->deviceCount; i++ )
         {
             (*hostApi)->deviceInfos[i] =
-                &pulseaudioHostApi->deviceInfoArray[i];
+                &pulseaudioHostApi->deviceInfoArray[i].inheritedDeviceInfo;
         }
     }
 
@@ -1127,11 +1127,23 @@ PaError OpenStream( struct PaUtilHostApiRepresentation *hostApi,
             goto openstream_error;
         }
 
+        pa_channel_map_init_auto( &stream->inputChannelMap,
+                                  inputChannelCount,
+                                  PA_CHANNEL_MAP_DEFAULT );
+
+        if( !pa_channel_map_valid( &stream->inputChannelMap ) )
+        {
+            PA_DEBUG( ("Portaudio %s: Invalid channel map for input!\n",
+                      __FUNCTION__) );
+            result = paUnanticipatedHostError;
+            goto openstream_error;
+        }
+
         stream->inputStream =
             pa_stream_new( pulseaudioHostApi->context,
                            stream->inputStreamName,
                            &stream->inputSampleSpec,
-                           NULL );
+                           &stream->inputChannelMap );
 
         if( stream->inputStream != NULL )
         {
@@ -1239,11 +1251,23 @@ PaError OpenStream( struct PaUtilHostApiRepresentation *hostApi,
             goto openstream_error;
         }
 
+        pa_channel_map_init_auto( &stream->outputChannelMap,
+                                  outputChannelCount,
+                                  PA_CHANNEL_MAP_DEFAULT );
+
+        if( !pa_channel_map_valid( &stream->outputChannelMap ) )
+        {
+            PA_DEBUG( ("Portaudio %s: Invalid channel map for output!\n",
+                      __FUNCTION__) );
+            result = paUnanticipatedHostError;
+            goto openstream_error;
+        }
+
         stream->outputStream =
             pa_stream_new( pulseaudioHostApi->context,
                            stream->outputStreamName,
                            &stream->outputSampleSpec,
-                           NULL );
+                           &stream->outputChannelMap );
 
         if( stream->outputStream != NULL )
         {
